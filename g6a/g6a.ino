@@ -665,18 +665,23 @@ void loop() {
             }
             
             // short press
+
+            
             // audio peak filter for CW
             bypass = abs(bypass-1);
             if (bypass==0) {
-                SDR.disableALSfilter();
+                SDR.setAGCmode(AGCoff);
+                //SDR.disableALSfilter();
                 lcd.setCursor(0,3);
-                lcd.print("ALS: byp ");
+                lcd.print("agc off");
             } else {
-                SDR.enableALSfilter();
-                SDR.setALSfilterPeak();
+                SDR.setAGCmode(AGCmedium);
+                //SDR.enableALSfilter();
+                //SDR.setALSfilterPeak();
                 lcd.setCursor(0,3);
-                lcd.print("ALS: peak");
+                lcd.print("agc ON ");
             }
+            
             continue;
             /*
             if (RIT==0) {
