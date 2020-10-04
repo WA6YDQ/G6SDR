@@ -30,7 +30,7 @@ getting audio out but this is among the cheapest and works
 very well. I used the 'Audio Shield' for the 4.x boards.
 
 The DSP routines are still in flux - they are working (and much
-works quite will) but it's a work in progress.
+of it works quite well) but it's a work in progress.
 
 Update:
 The DSP routines I'm using today come from Derek Rowell, but I'm 
@@ -60,7 +60,12 @@ for high gain levels.
 of the analog switch (I have a 31db unit I'll be using). Also front-end
 filtering NEEDS to be used for this type of mixer.
 
+4. Sometimes when tuning, I noticed the encoder doesn't respond for the 
+first pulse when changing tuning directions. It seems to be a fault with
+the library function. A power cycle fixes it. 
 
+5. The QRP labs receive module receives at 6M (50-54MHz) but not very well.
+I measured -90 dBm for MDS. I'm getting -116 to -120 dBm for MDS below 30 MHz.
 
 -- Kurt
 

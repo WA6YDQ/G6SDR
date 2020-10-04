@@ -36,17 +36,19 @@
 #include <Wire.h>           // I2C for audio/oscillator 
 #include "g6.h"             // global variables, pre-defined channels, etc
 
-// audio includes
+// audio and sdr includes
 #include <Audio.h>
 #include <Arduino.h>
 #include "AudioSDRlib.h"
 #include <SPI.h>
 //#include <SerialFlash.h>
 
-
+#define NORM        // SDR routines
+//#define EXP       // testing only
 
 // for sdr and all audio
 // --- Audio library classes
+#ifdef NORM
 AudioInputI2S          IQinput;
 AudioAmplifier         amp1;
 AudioSDRpreProcessor   preProcessor;
@@ -67,7 +69,21 @@ AudioConnection c6(amp1,0,audio_out,0); // no audio amp on right channel
 //AudioConnection c5(SDR, 0,           audio_out, 0);
 //AudioConnection c6(SDR, 1,           audio_out, 1);
 
+#endif
 
+#ifdef EXP
+// definitions
+AudioInputI2S          IQinput;
+AudioAmplifier         amp1;
+Passthru               passthru
+AudioOutputI2S         audio_out;
+AudioControlSGTL5000   codec;
+// conections
+AudioConnection c1(IQinput, 0, passthru, 0);
+AudioConnection c2(IQinput, 1, passthru, 1);
+AudioConnection c3(passthru, 0, amp1, 0);
+AudioConnection c4(amp1, 0, audio_out, 0);
+#endif
 
 
 
@@ -83,8 +99,8 @@ AudioConnection c6(amp1,0,audio_out,0); // no audio amp on right channel
 #define DEBOUNCE 70         // switch debounce delay
 #define CHANNELMAX 100      // largest channel number
 #define CHANNELMIN 1        // smallest channel number
-#define FREQMIN 15000L      // 15 khz
-#define FREQMAX 54000000L   // 54 MHz
+#define FREQMIN 15000UL      // 15 khz
+#define FREQMAX 30000000UL   // 30 MHz
 #define MAXMODE 5
 #define REFOSC 27006700     // actual measured reference xtal (use your own, not mine) 
 
@@ -102,6 +118,16 @@ LiquidCrystal lcd(RS,E,D4,D5,D6,D7);
 
 #ifdef TFTUSED
 // wiring for tft display
+#include <ILI9341_t3.h>
+#include <font_Arial.h> // from ILI9341_t3
+#define TFT_DC      20
+#define TFT_CS      21
+#define TFT_RST    255  // 255 = unused, connect to 3.3V
+#define TFT_MOSI     7
+#define TFT_SCLK    14
+#define TFT_MISO    12
+ILI9341_t3 tft = ILI9341_t3(TFT_CS, TFT_DC, TFT_RST, TFT_MOSI, TFT_SCLK, TFT_MISO);
+
 
 #endif
 
@@ -117,8 +143,7 @@ LiquidCrystal lcd(RS,E,D4,D5,D6,D7);
 
 // inputs/control outputs
 #define DCVOLTIN 14     // analog in - reads dc voltage
-#define SIDETONEOUT 0
-#define PREAMPOUT 2
+#define PREAMPOUT 2     // line out to enable preamp
 #define CWKEY 0         // cw key line 0 
 
 // all global vars defined in g6.h
@@ -186,7 +211,7 @@ void showMemUsage() {
 
 // ------- show current frequency ---------
 void showFreq() {
-    unsigned long oscfreq;
+    unsigned long long oscfreq;
     int mhz = 0L, khz = 0L, hz = 0L;
     char temp[8];
     lcd.setCursor(0,0);
@@ -197,7 +222,7 @@ void showFreq() {
     }
     
     if (FREQ < FREQMIN || FREQ > FREQMAX) {
-        lcd.print("00000000");
+        lcd.print("[BLANK]  ");
     } else {
  
         // show mhz
@@ -221,9 +246,10 @@ void showFreq() {
         lcd.print(temp);
 
         // send freq to si5351 osc (freq wants milliHz, so mult by 100
-        // weaver sdr wants 4x frequency
-        oscfreq = ((unsigned long long) FREQ - tuningOffset) * 100ULL * 4ULL;
-        si5351.set_freq((unsigned long long)oscfreq, SI5351_CLK0); // initial value
+        // weaver sdr wants 4x frequency (reason for *400ULL)
+        oscfreq = ((unsigned long long)FREQ - (unsigned long long)tuningOffset) * 400ULL;
+        si5351.set_freq(oscfreq, SI5351_CLK0); // initial value
+
     }
    
     return;
@@ -283,7 +309,7 @@ void showRit() {
         lcd.print("OFF   ");
     } else {
         lcd.setCursor(4,2);
-        sprintf(temp,"%+04ld  ",RITFREQ);
+        sprintf(temp,"%+04d  ",(unsigned int)RITFREQ);
         lcd.print(temp);
     }
     return;
@@ -404,7 +430,7 @@ void scan() {
 
 // ---------- store -----------
 void store() {      // save vfo frequency in the current channel memory
-    unsigned int address = CHANNEL*5;     // long is 4 bytes, mode is 1
+    unsigned int address = CHANNEL*5;     // ull is 8 bytes, mode is 1
     // verify good frequency
     if (FREQ < FREQMIN || FREQ > FREQMAX) return;
     EEPROM.put(address,FREQ);               // save current freq in current channel
@@ -463,6 +489,18 @@ void setup() {      // called once at turn-on
     lcd.clear();
 #endif
 
+#ifdef TFTUSED
+    tft.begin();
+    tft.fillScreen(ILI9341_BLACK);
+    tft.setTextColor(ILI9341_YELLOW);
+    tft.setFont(Arial_24);
+    //tft.setTextSize(3);
+    tft.setCursor(40, 8);
+    tft.println("working!");
+
+
+
+#endif
     pinMode(CWKEY, INPUT_PULLUP);
     
     // set output lines
@@ -471,6 +509,7 @@ void setup() {      // called once at turn-on
 
     Wire.begin();
     Serial.begin(9600);
+    
     delay(200);        // was 2000
 
     // setup the master clock/synth
@@ -492,12 +531,12 @@ void setup() {      // called once at turn-on
     // if eeprom is uninitialized, pre-load freq/mode
     byte eetest = 0;
     eetest = EEPROM.read(1024);
-    if (eetest != 0xab) 
+    if (eetest != 0xba) 
         preLoad();
-    EEPROM.write(1024,0xab);
+    EEPROM.write(1024,0xba);
 
 
-
+#ifdef NORM
     // for SDR
     // --- Initialize AudioSDR
   preProcessor.startAutoI2SerrorDetection();    // IQ error compensation
@@ -505,7 +544,7 @@ void setup() {      // called once at turn-on
   //
   SDR.setMute(true);            // keep quiet until everything's running
   SDR.enableAGC();              // turn on agc
-  SDR.setAGCmode(AGCmedium);    // 0->OFF; 1->FAST; 2->MEDIUM; 3->SLOW
+  SDR.setAGCmode(AGCfast);      // 0->OFF; 1->FAST; 2->MEDIUM; 3->SLOW
   SDR.disableALSfilter();
   //
   SDR.enableNoiseBlanker();             // can be turned off later
@@ -537,7 +576,23 @@ void setup() {      // called once at turn-on
   //SDR.enableALSfilter();  // just decreases audio, not useful to clean up AM
   //SDR.setALSfilterNotch();
   SDR.setMute(false);
-  
+
+#endif
+
+#ifdef EXP
+    AudioMemory(20);
+    AudioNoInterrupts();
+    codec.inputSelect(AUDIO_INPUT_LINEIN);
+    codec.volume(0.8);
+    codec.lineInLevel(15);
+    codec.lineOutLevel(13);
+    codec.enable();
+    AudioInterrupts();
+    delay(500);
+    amp1.gain(0.1);
+#endif
+
+
 }
 
 // ------------------------------------
@@ -667,7 +722,7 @@ void loop() {
             // short press
 
             
-            // audio peak filter for CW
+            // testing different functs here
             bypass = abs(bypass-1);
             if (bypass==0) {
                 SDR.setAGCmode(AGCoff);
@@ -675,7 +730,7 @@ void loop() {
                 lcd.setCursor(0,3);
                 lcd.print("agc off");
             } else {
-                SDR.setAGCmode(AGCmedium);
+                SDR.setAGCmode(AGCfast);
                 //SDR.enableALSfilter();
                 //SDR.setALSfilterPeak();
                 lcd.setCursor(0,3);
