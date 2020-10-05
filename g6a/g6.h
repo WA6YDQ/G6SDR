@@ -57,7 +57,8 @@ float SIDETONEVOL=0.5;
 
 int bypass=0;
 
-
+// AGC mode (0=off, 1=fast, 2=medium, 3=slow)
+byte AGCVAL;
 
 
 // initialize memory channels

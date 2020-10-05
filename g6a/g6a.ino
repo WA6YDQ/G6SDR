@@ -72,10 +72,11 @@ AudioConnection c6(amp1,0,audio_out,0); // no audio amp on right channel
 #endif
 
 #ifdef EXP
+#include "sdr.h"
 // definitions
 AudioInputI2S          IQinput;
 AudioAmplifier         amp1;
-Passthru               passthru
+AudioPassthru          passthru;
 AudioOutputI2S         audio_out;
 AudioControlSGTL5000   codec;
 // conections
@@ -92,7 +93,7 @@ AudioConnection c4(amp1, 0, audio_out, 0);
 
 // what kind of display is being used?
 #define LCDUSED             // we're using an LCD display
-//define TFTUSED              // we're using a tft display
+//#define TFTUSED              // we're using a tft display
 
 
 // general defines
@@ -120,26 +121,29 @@ LiquidCrystal lcd(RS,E,D4,D5,D6,D7);
 // wiring for tft display
 #include <ILI9341_t3.h>
 #include <font_Arial.h> // from ILI9341_t3
-#define TFT_DC      20
-#define TFT_CS      21
+#define TFT_DC      9       // was 20
+#define TFT_CS      10      // was 21
 #define TFT_RST    255  // 255 = unused, connect to 3.3V
-#define TFT_MOSI     7
-#define TFT_SCLK    14
+#define TFT_MOSI    11      // was  7
+#define TFT_SCLK    13      // was 14
 #define TFT_MISO    12
 ILI9341_t3 tft = ILI9341_t3(TFT_CS, TFT_DC, TFT_RST, TFT_MOSI, TFT_SCLK, TFT_MISO);
-
-
 #endif
 
 
 // front panel buttons and controls:    short/long press
-#define SW1   25        // sw1 button - vfo/mem/sto/rcl
-#define SW2   27        // sw2 button - mode/menu
-#define SW3   29        // sw3 button - split/preamp
-#define SW4   31        // sw4 button - filter/agc
-#define SW5   33        // sw5 button - step/scan
-#define PULSE 24        // shaft encoder step
+#define SW1   25        // sw1 button - vfo/mem
+#define SW2   27        // sw2 button - sto/rcl
+#define SW3   29        // sw3 button - rit/clr
+#define SW4   31        // sw4 button - qmem
+#define SW5   33        // sw5 button - step/save to zero
+#define SW6   28        // sw6 button - cw mode
+#define SW7   30        // sw7 button - ssb mode
+#define SW8   32        // sw8 button - am mode
+#define PULSE 24        // shaft encoder step (channel, menu etc)
 #define DIR   26        // shaft encoder direction
+#define TUNEP 40        // shaft encoder for tuning (frequency tuning)
+#define TUNED 41        // shaft encoder dir
 
 // inputs/control outputs
 #define DCVOLTIN 14     // analog in - reads dc voltage
@@ -345,6 +349,11 @@ void showPreamp() {     // show if preamp is on/off
 
 // --------- show AGG on/off
 void showAGC() {
+    char agc_setting[4]={'O','F','M','S'};
+    lcd.setCursor(0,3);
+    lcd.print("AGC-");
+    lcd.print(agc_setting[AGCVAL]);
+    
     return;
 }
 
@@ -544,13 +553,14 @@ void setup() {      // called once at turn-on
   //
   SDR.setMute(true);            // keep quiet until everything's running
   SDR.enableAGC();              // turn on agc
-  SDR.setAGCmode(AGCfast);      // 0->OFF; 1->FAST; 2->MEDIUM; 3->SLOW
+  AGCVAL = 1;                   // Fast
+  SDR.setAGCmode(AGCVAL);      // 0->OFF; 1->FAST; 2->MEDIUM; 3->SLOW
   SDR.disableALSfilter();
   //
   SDR.enableNoiseBlanker();             // can be turned off later
   SDR.setNoiseBlankerThresholdDb(10.0); // 10.0 is a good start value
   //
-  SDR.setInputGain(3.0);                // 0.0 (off) to 10.0 (max)
+  SDR.setInputGain(1.25);               // type 1.25, from 0.0 (off) to 10.0 (max)
   SDR.setOutputGain(5.0);               // these can be changed in menu settings
   SDR.setIQgainBalance(1.020);          // change this for your setup
   //
@@ -604,6 +614,9 @@ void loop() {
     float aGain;
     
     Serial.println("Starting");
+    CHANNEL = 0;
+    recall();       // restore from channel 0 (stored by long press on SW5 (step)
+    CHANNEL = 1;
     tuneval = 0;
     // initial display setup
     showMode();     // tuning offset set in showMode() so it goes 1st
@@ -725,16 +738,18 @@ void loop() {
             // testing different functs here
             bypass = abs(bypass-1);
             if (bypass==0) {
-                SDR.setAGCmode(AGCoff);
+                AGCVAL = 0;     // off
+                SDR.setAGCmode(AGCVAL);
+                showAGC();
                 //SDR.disableALSfilter();
-                lcd.setCursor(0,3);
-                lcd.print("agc off");
+                
             } else {
-                SDR.setAGCmode(AGCfast);
+                AGCVAL = 1;     // fast
+                SDR.setAGCmode(AGCVAL);
+                showAGC();
                 //SDR.enableALSfilter();
                 //SDR.setALSfilterPeak();
-                lcd.setCursor(0,3);
-                lcd.print("agc ON ");
+                
             }
             
             continue;
@@ -777,8 +792,11 @@ void loop() {
         if (digitalRead(SW5)==0) {      // step/scan switch
             //Serial.println("sw5 pressed");
             delay(250);
-            if (digitalRead(SW5)==0) {  // long press - scan
-                scan();
+            if (digitalRead(SW5)==0) {  // long press store vfo to chan 0
+                byte TCHAN = CHANNEL;
+                CHANNEL=0;
+                store();
+                CHANNEL = TCHAN;
                 if (digitalRead(SW5)==0) {
                     while (digitalRead(SW5)==0) delay(DEBOUNCE);
                     delay(DEBOUNCE);

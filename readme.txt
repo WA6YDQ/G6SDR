@@ -48,9 +48,7 @@ works now - the updates will also work but might be radically different.
 
 Random notes:
 
-1. The gains are set pretty high for SDR.lineInLevel and SDR.lineOutLevel
-With the agc ON, these levels work OK. With the agc OFF, these are way
-too hot and need to be lowered. I need to play with the agc levels.
+1. [Deleted]
 
 2. I'm using 5v on the op amps at the IQ level. Pushing these to 12 v
 will increase the dynamic range by a lot as well as lower the need
