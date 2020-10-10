@@ -257,13 +257,13 @@ class AudioSDR : public AudioStream {
     boolean   _SAM_PLL_isLocked = false;
     // --- PLL P-I (proportional + integral) filter design parameters
     float32_t _Bn    = 9000.0 / AUDIO_SAMPLE_RATE_EXACT; // closed-loop PLL "noise-bandwidth"
-    float32_t _zeta  = 2.0;                             // PLL damping factor - 0.707
-    float32_t _Kd    = 1.0f;                            // phase detector gain
-    float32_t _Ko    = 1.0f;                            // oscillator gain
+    float32_t _zeta  = 2.0;                              // PLL damping factor - 0.707
+    float32_t _Kd    = 1.0f;                             // phase detector gain
+    float32_t _Ko    = 1.0f;                             // oscillator gain
     // --- Derived parameters
-    float32_t _Kp    = 0.0;                             // proportional gain
-    float32_t _Ki    = 0.0;                             // integral gain
-    float32_t _K_1   = _Kp + _Ki;;                        // proportional gain
+    float32_t _Kp    = 0.0;                              // proportional gain
+    float32_t _Ki    = 0.0;                              // integral gain
+    float32_t _K_1   = _Kp + _Ki;;                       // proportional gain
     float32_t _K_2   = _Ki;                              // integral gain
     //
     // Private variables for the audio output filters
@@ -334,7 +334,7 @@ class AudioSDR : public AudioStream {
     // ---
     float32_t approx_atan2_f32(float y, float x) {
       const float32_t halfPI = 0.5 * PI;
-      if (x != 0.0)  {                                               // Untangle the quadrants
+      if (x != 0.0)  {                                             // Untangle the quadrants
         if (fabsf(x) > fabsf(y)) {
           float32_t z = y / x;
           if (x > 0.0)        return approx_atan_f32(z);           // atan2(y,x) = atan(y/x) if x > 0
@@ -436,7 +436,7 @@ class AudioSDR : public AudioStream {
     /*---------------------------------------------------------------*
                         --- FREQUENCY SHIFTER ---
         Performs a complex frequency shift by complex multiplication
-        of a time domain signal by a complex exonential.
+        of a time domain signal by a complex exponential.
         From Fourier theory a spectral shift:
            F(j(w + w0)) = Fourier[f(t) * e^(j(w_0*t))]
                         = Fourier[f(t) * cos(w_0]*t) * jsin(w_0*t)]

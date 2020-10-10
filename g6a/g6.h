@@ -52,13 +52,16 @@ long int tuneval = 0L;      // shaft encoder
 int oldtuneval = 0;
 
 // cw sidetone
-unsigned int SIDETONEFREQ=750;
+unsigned int SIDETONEFREQ=774;      // the CW filter has a center freq of 774 hz
 float SIDETONEVOL=0.5;
 
 int bypass=0;
 
 // AGC mode (0=off, 1=fast, 2=medium, 3=slow)
 byte AGCVAL;
+
+// S-meter 
+int16_t FFTbuffer[512];
 
 
 // initialize memory channels

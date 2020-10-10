@@ -52,6 +52,7 @@
 AudioInputI2S          IQinput;
 AudioAmplifier         amp1;
 AudioSDRpreProcessor   preProcessor;
+AudioGrabberComplex256 spectrumData;
 AudioSDR               SDR;
 AudioOutputI2S         audio_out;
 AudioControlSGTL5000   codec;
@@ -59,6 +60,8 @@ AudioControlSGTL5000   codec;
 // Audio Block connections
 AudioConnection c1(IQinput, 0,       preProcessor, 0);
 AudioConnection c2(IQinput, 1,       preProcessor, 1);
+AudioConnection c21(preProcessor,0,spectrumData,0);
+AudioConnection c22(preProcessor,0,spectrumData,1);
 AudioConnection c3(preProcessor, 0,  SDR, 0);
 AudioConnection c4(preProcessor, 1,  SDR, 1);
 // exper
@@ -149,6 +152,10 @@ ILI9341_t3 tft = ILI9341_t3(TFT_CS, TFT_DC, TFT_RST, TFT_MOSI, TFT_SCLK, TFT_MIS
 #define DCVOLTIN 14     // analog in - reads dc voltage
 #define PREAMPOUT 2     // line out to enable preamp
 #define CWKEY 0         // cw key line 0 
+#define DOT 0           // keyer dot
+#define PTT 0           // voice PTT
+#define DASH            // keyer dash
+
 
 // all global vars defined in g6.h
 
@@ -164,8 +171,11 @@ Metro readDC = Metro(1500);
 // debugging - show cpu usage every 60 seconds
 Metro showUsage(60000);
 
+// Metro showSmeter(125);  // update s-meter 8 times/second
+
 // read/update volume control every 50 msec
 elapsedMillis volmsec = 0;
+
 
 
 
@@ -205,7 +215,30 @@ void showMemUsage() {
     
 }
 
+void showRxLevel(void) {     // show signal levels
+    unsigned long sigLevel = 10;
+    int slevel = 0, n, i;
+    //return;
+    if (spectrumData.newDataAvailable()) {
+        spectrumData.grab(FFTbuffer);   // get 512 real/complex values
+        for (int n=0; n < 512; n++)  
+            sigLevel += abs(FFTbuffer[n++]);  // get average of real values
+        sigLevel /= 256;
+        //Serial.println(sigLevel);    
 
+    }
+    lcd.setCursor(0,3);
+    lcd.print("                   ");
+    slevel = map(sigLevel,1,5000,0,19);
+    slevel = constrain(slevel,0,19);
+    //Serial.println(slevel);
+    lcd.setCursor(0,3);
+    for (n=0; n<slevel; n++) lcd.write(0xff);
+    for (i=n; i<20; i++) lcd.print(' ');
+    showFreq();
+    showStep();
+    return;
+}
 
 
 #ifdef LCDUSED
@@ -277,6 +310,7 @@ void showMode() {
     lcd.print(MODENAME[MODE]);
     lcd.print(FILTERNAME[FILTER]);
     tuningOffset = SDR.setDemodMode(MODE);  // set the mode in dsp, get the offset
+    
     return;
 }
 
@@ -350,7 +384,7 @@ void showPreamp() {     // show if preamp is on/off
 // --------- show AGG on/off
 void showAGC() {
     char agc_setting[4]={'O','F','M','S'};
-    lcd.setCursor(0,3);
+    lcd.setCursor(11,2);
     lcd.print("AGC-");
     lcd.print(agc_setting[AGCVAL]);
     
@@ -451,6 +485,7 @@ void store() {      // save vfo frequency in the current channel memory
     lcd.print(" saved");    // on the LCD this extends past the freq display
     delay(1200);
     showFreq();
+    lcd.print("  ");    // remove "saved" overflow
     showChannel();
     showStep();
     return; 
@@ -560,8 +595,8 @@ void setup() {      // called once at turn-on
   SDR.enableNoiseBlanker();             // can be turned off later
   SDR.setNoiseBlankerThresholdDb(10.0); // 10.0 is a good start value
   //
-  SDR.setInputGain(1.25);               // type 1.25, from 0.0 (off) to 10.0 (max)
-  SDR.setOutputGain(5.0);               // these can be changed in menu settings
+  SDR.setInputGain(0.7);               // type 1.25, from 0.0 (off) to 10.0 (max)
+  SDR.setOutputGain(3.0);               // these can be changed in menu settings
   SDR.setIQgainBalance(1.020);          // change this for your setup
   //
   // --- initial set up  
@@ -580,9 +615,8 @@ void setup() {      // called once at turn-on
   AudioInterrupts();
   delay(500);
   //
-  SDR.setMute(false);
 
-  amp1.gain(0.1);       // initial gain on the amp - use volume control to set
+  amp1.gain(1.0);       // initial gain on the amp - use volume control to set
   //SDR.enableALSfilter();  // just decreases audio, not useful to clean up AM
   //SDR.setALSfilterNotch();
   SDR.setMute(false);
@@ -629,7 +663,11 @@ void loop() {
     showFilter();
     showStep();     // this must be LAST!
 
-    //Serial.println("setup done");
+    // enable filter, set value
+    SDR.enableAudioFilter();
+    SDR.setAudioFilter(audio3300);
+    SDR.setMute(false);
+
 
     // loop forever testing switches and (if used) TFT touch screen
     // shaft encoders are tested via interrupts
@@ -637,12 +675,13 @@ void loop() {
 
        // set audio out via vol pot on line A15 
        if (volmsec > 50) {
+            // test volune knob
             volKnob = analogRead(15);
-            aGain = (float)volKnob/1023.0;
-            amp1.gain(1.0-aGain);
+            aGain = (float)volKnob/342.0;
+            amp1.gain(3.0-aGain);
             volmsec = 0;
        }
-       
+
         // test front panel switches
         
         if (digitalRead(SW4)) {      // vfo/mem/sto/rcl switch
@@ -736,8 +775,8 @@ void loop() {
 
             
             // testing different functs here
-            bypass = abs(bypass-1);
-            if (bypass==0) {
+           
+            if (AGCVAL) {
                 AGCVAL = 0;     // off
                 SDR.setAGCmode(AGCVAL);
                 showAGC();
@@ -846,7 +885,12 @@ void loop() {
         if (showUsage.check() == 1) {   // timing set at start of code by metro
             showMemUsage();
         }
-        
+
+        /*
+        if (showSmeter.check() == 1) {  // show signal strength
+            showRxLevel();
+        }
+        */
         continue;
     }
 }   // end of loop() and main code. 
