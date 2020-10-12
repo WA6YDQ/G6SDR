@@ -296,9 +296,11 @@ void showMode() {
     lcd.print(FILTERNAME[FILTER]);
     tuningOffset = SDR.setDemodMode(MODE);  // set the mode in dsp, get the offset
     if (MODE==2 || MODE==3) {
-        bpfilter.resonance(3.4);    // cw filter at 750 hz 
+        bpfilter.resonance(3.9);    // cw filter at 750 hz 
+        SDR.setOutputGain(1.6);     // compensate for cw filter's gain
     } else {
         bpfilter.resonance(0.0);    // disable cw filter if not on cw mode
+        SDR.setOutputGain(3.5);     // default gain w/no cw filter
     }
     return;
 }
@@ -585,7 +587,7 @@ void setup() {      // called once at turn-on
   SDR.setNoiseBlankerThresholdDb(10.0); // 10.0 is a good start value
   //
   SDR.setInputGain(0.7);               // type 1.25, from 0.0 (off) to 10.0 (max)
-  SDR.setOutputGain(3.5);               // these can be changed in menu settings
+  SDR.setOutputGain(3.5);               // 
   SDR.setIQgainBalance(1.020);          // change this for your setup
   //
   // --- initial set up  
