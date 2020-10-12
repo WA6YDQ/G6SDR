@@ -41,19 +41,19 @@
 #include <Arduino.h>
 #include "AudioSDRlib.h"
 #include <SPI.h>
-//#include <SerialFlash.h>
 
-#define NORM        // SDR routines
-//#define EXP       // testing only
+
+
 
 // for sdr and all audio
 // --- Audio library classes
-#ifdef NORM
+
 AudioInputI2S          IQinput;
 AudioAmplifier         amp1;
 AudioSDRpreProcessor   preProcessor;
 AudioGrabberComplex256 spectrumData;
 AudioSDR               SDR;
+AudioFilterStateVariable    bpfilter;   // cw filter (enabled in showMode())
 AudioOutputI2S         audio_out;
 AudioControlSGTL5000   codec;
 //---
@@ -64,30 +64,15 @@ AudioConnection c21(preProcessor,0,spectrumData,0);
 AudioConnection c22(preProcessor,0,spectrumData,1);
 AudioConnection c3(preProcessor, 0,  SDR, 0);
 AudioConnection c4(preProcessor, 1,  SDR, 1);
-// exper
-AudioConnection c5(SDR,0,amp1,0);
+AudioConnection c51(SDR,0,bpfilter,0);
+AudioConnection c52(bpfilter,1,amp1,0); // bandpass, resonance mode
 AudioConnection c6(amp1,0,audio_out,0); // no audio amp on right channel
 
-// maybe put a mixer here and feed sdr 0,1 together to amp
-//AudioConnection c5(SDR, 0,           audio_out, 0);
-//AudioConnection c6(SDR, 1,           audio_out, 1);
 
-#endif
 
-#ifdef EXP
-#include "sdr.h"
-// definitions
-AudioInputI2S          IQinput;
-AudioAmplifier         amp1;
-AudioPassthru          passthru;
-AudioOutputI2S         audio_out;
-AudioControlSGTL5000   codec;
-// conections
-AudioConnection c1(IQinput, 0, passthru, 0);
-AudioConnection c2(IQinput, 1, passthru, 1);
-AudioConnection c3(passthru, 0, amp1, 0);
-AudioConnection c4(amp1, 0, audio_out, 0);
-#endif
+
+
+
 
 
 
@@ -310,7 +295,11 @@ void showMode() {
     lcd.print(MODENAME[MODE]);
     lcd.print(FILTERNAME[FILTER]);
     tuningOffset = SDR.setDemodMode(MODE);  // set the mode in dsp, get the offset
-    
+    if (MODE==2 || MODE==3) {
+        bpfilter.resonance(3.4);    // cw filter at 750 hz 
+    } else {
+        bpfilter.resonance(0.0);    // disable cw filter if not on cw mode
+    }
     return;
 }
 
@@ -580,7 +569,7 @@ void setup() {      // called once at turn-on
     EEPROM.write(1024,0xba);
 
 
-#ifdef NORM
+
     // for SDR
     // --- Initialize AudioSDR
   preProcessor.startAutoI2SerrorDetection();    // IQ error compensation
@@ -596,7 +585,7 @@ void setup() {      // called once at turn-on
   SDR.setNoiseBlankerThresholdDb(10.0); // 10.0 is a good start value
   //
   SDR.setInputGain(0.7);               // type 1.25, from 0.0 (off) to 10.0 (max)
-  SDR.setOutputGain(3.0);               // these can be changed in menu settings
+  SDR.setOutputGain(3.5);               // these can be changed in menu settings
   SDR.setIQgainBalance(1.020);          // change this for your setup
   //
   // --- initial set up  
@@ -616,25 +605,18 @@ void setup() {      // called once at turn-on
   delay(500);
   //
 
-  amp1.gain(1.0);       // initial gain on the amp - use volume control to set
+  // cw only bp filter
+  bpfilter.frequency(700);  // freq in Hz
+  bpfilter.resonance(0.0);  // turn off initially
+  
+  amp1.gain(0.0);       // initial gain on the amp - use volume control to set
   //SDR.enableALSfilter();  // just decreases audio, not useful to clean up AM
   //SDR.setALSfilterNotch();
   SDR.setMute(false);
 
-#endif
 
-#ifdef EXP
-    AudioMemory(20);
-    AudioNoInterrupts();
-    codec.inputSelect(AUDIO_INPUT_LINEIN);
-    codec.volume(0.8);
-    codec.lineInLevel(15);
-    codec.lineOutLevel(13);
-    codec.enable();
-    AudioInterrupts();
-    delay(500);
-    amp1.gain(0.1);
-#endif
+
+
 
 
 }
@@ -677,8 +659,9 @@ void loop() {
        if (volmsec > 50) {
             // test volune knob
             volKnob = analogRead(15);
-            aGain = (float)volKnob/342.0;
-            amp1.gain(3.0-aGain);
+            aGain = (float)volKnob/682.0;  
+            if (aGain > 1.50) aGain = 1.5;   // allow turning off volume completely
+            amp1.gain(1.5-aGain);
             volmsec = 0;
        }
 
